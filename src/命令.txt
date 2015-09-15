@@ -1,0 +1,44 @@
+ui界面转换
+pyuic4 -x project.ui -o project.py
+
+参数:
+-p, --preview
+
+预览用户界面。
+
+-o, --output
+
+输出产生的代码到指定文件，而不是console终端上。
+
+-x, --execute
+
+产生额外的代码来测试和显示类。
+
+-d, --debug
+
+显示调试信息。
+
+-i, --indent N
+
+设置缩进的空格数N，N为0时表示使用tab，缺省N为4，即4个空格。
+
+打包:
+python pyinstaller.py
+
+import  os
+
+if __name__ == '__main__':
+    from PyInstaller.main import run
+    opts=['abc.py','-F','-w','--icon=favicon.ico']
+    run(opts)
+
+-- 参数说明：
+-F, --onefile Py代码只有一个文件
+-D, --onedir Py代码放在一个目录中（默认是这个）
+-K, --tk 包含TCL/TK
+-d, --debug 生成debug模式的exe文件
+-w, --windowed, --noconsole 窗体exe文件(Windows Only)
+-c, --nowindowed, --console 控制台exe文件(Windows Only)
+-o DIR, --out=DIR 设置spec文件输出的目录，默认在PyInstaller同目录
+--icon=<FILE.ICO> 加入图标（Windows Only）
+-v FILE, --version=FILE 加入版本信息文件
