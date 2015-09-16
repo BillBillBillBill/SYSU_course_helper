@@ -7,7 +7,11 @@
 # WARNING! All changes made in this file will be lost!
 
 __author__ = 'Huang Xiongbiao (billo@qq.com)'
+__email__ = 'billo@qq.com'
+__version__ = '0.0.5'
+
 import time
+from pytes.pytesser import image_to_string, image_file_to_string
 import urllib2
 import urllib
 import json
@@ -15,6 +19,9 @@ import cookielib
 import sys
 import os
 import StringIO
+import Image
+reload(sys)
+sys.setdefaultencoding("utf-8")
 
 from PyQt4 import QtCore, QtGui, uic
 
@@ -33,7 +40,8 @@ except AttributeError:
     def _translate(context, text, disambig):
         return QtGui.QApplication.translate(context, text, disambig)
 
-CODE_IMG_PATH = 'D:\code_img.jpg'
+CODE_IMG_PATH = r'D:\code_img.jpg'
+
 
 class Ui_Dialog(object):
     def setupUi(self, Dialog):
@@ -162,7 +170,7 @@ class Ui_Dialog(object):
         QtCore.QMetaObject.connectSlotsByName(Dialog)
 
     def retranslateUi(self, Dialog):
-        Dialog.setWindowTitle(_translate("Dialog", "中山大学选课助手v0.0.4", None))
+        Dialog.setWindowTitle(_translate("Dialog", "中山大学选课助手v%s" % __version__, None))
         self.label_id.setText(_translate("Dialog", "学号", None))
         self.label_password.setText(_translate("Dialog", "密码", None))
         self.fresh_code_btn.setText(_translate("Dialog", "刷新验证码", None))
@@ -213,7 +221,7 @@ class course_helper(QtGui.QMainWindow, Ui_Dialog):
         icon.addPixmap(QtGui.QPixmap(_fromUtf8("D:\Python\pyqtfile\course_helper\logo.ico")), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         self.setWindowIcon(icon)
 
-        OK = QtGui.QMessageBox.information(self, u'提示', u'中山大学选课助手v0.0.4\n防止对服务器造成过大压力,设置选课间隔为4秒\n本工具仅作学习交流之用\n由此造成的任何问题都与作者无关\n同意后方可使用\n                                                AngryBill\n                                              2015.09.08', QtGui.QMessageBox.Yes, QtGui.QMessageBox.No)
+        OK = QtGui.QMessageBox.information(self, u'提示', u'中山大学选课助手v%s\n防止对服务器造成过大压力,设置选课间隔为4秒\n本工具仅作学习交流之用\n由此造成的任何问题都与作者无关\n同意后方可使用\n                                                AngryBill\n                                              2015.09.08' % __version__, QtGui.QMessageBox.Yes, QtGui.QMessageBox.No)
         if OK != QtGui.QMessageBox.Yes:
             sys.exit(0)
 
@@ -295,16 +303,22 @@ class course_helper(QtGui.QMainWindow, Ui_Dialog):
         try:
             # 下载图片
             addr = "http://uems.sysu.edu.cn/elect/login/code"
-            # img_name = CODE_IMG_PATH
+
             # 读到硬盘中
+            # img_name = CODE_IMG_PATH
             # open(img_name, "wb").write(urllib2.urlopen(addr).read())
+            # self.img = Image.open(img_name)
+
             # 改为读到内存中
             code_data = StringIO.StringIO(urllib2.urlopen(addr).read())
+            self.img = Image.open(StringIO.StringIO(code_data.getvalue()))
+            self.processCode()
 
             # 设置图片
             pixmap = QtGui.QPixmap()
             # pixmap.load(CODE_IMG_PATH)
             pixmap.loadFromData(QtCore.QByteArray(code_data.getvalue()))
+
             scene = QtGui.QGraphicsScene(self)
             item = QtGui.QGraphicsPixmapItem(pixmap)
             scene.addItem(item)
@@ -313,7 +327,31 @@ class course_helper(QtGui.QMainWindow, Ui_Dialog):
                 os.remove(CODE_IMG_PATH)
 
         except Exception, e:
-            self.debtex.setText(self.debugcontent + u"[Error]下载验证码失败!\n" + str(e))
+            self.debtex.setText(self.debugcontent + u"[Error]下载验证码失败! 原因:" + str(e))
+
+    # 处理验证码, 识别
+    def processCode(self):
+        # 二值化
+        pixdata = self.img.load()
+        for y in xrange(self.img.size[1]):
+            for x in xrange(self.img.size[0]):
+                if pixdata[x, y][0] < 90:
+                    pixdata[x, y] = (0, 0, 0, 255)
+        for y in xrange(self.img.size[1]):
+            for x in xrange(self.img.size[0]):
+                if pixdata[x, y][1] < 136:
+                    pixdata[x, y] = (0, 0, 0, 255)
+        for y in xrange(self.img.size[1]):
+            for x in xrange(self.img.size[0]):
+                if pixdata[x, y][2] > 0:
+                    pixdata[x, y] = (255, 255, 255, 255)
+        ori_w, ori_h = self.img.size
+        # 裁剪边缘
+        # 这里的参数可以这么认为：从某图的(x,y)坐标开始截，截到(width+x,height+y)坐标
+        box = (1, 1, ori_w-1, ori_h-1)
+        newIm = self.img.crop(box)
+        code = image_to_string(newIm)
+        self.textEdit_code.setText(code[:4])
 
     def login(self):
         try:
