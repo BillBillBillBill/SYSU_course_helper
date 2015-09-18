@@ -20,6 +20,7 @@ import sys
 import os
 import StringIO
 import Image
+import time
 reload(sys)
 sys.setdefaultencoding("utf-8")
 
@@ -389,13 +390,15 @@ class course_helper(QtGui.QMainWindow, Ui_Dialog):
         if not self.course_list:
             QtGui.QMessageBox.information(self, u'提示', u'请输入最少一门课程', QtGui.QMessageBox.Yes)
             return
-        if len(self.debugcontent) > 500:
+        # 清屏
+        if len(self.debugcontent) > 300:
             self.debugcontent = ""
 
         self.pick_times += 1
 
         for jxbh in self.course_list:
-            self.debugcontent += u"选择课程:" + str(jxbh) + "\n"
+            nowtime = time.strftime("%Y/%m/%d %H:%M:%S", time.localtime(time.time()))
+            self.debugcontent += nowtime + u"课程:" + str(jxbh) + "\n"
 
             try:
                 data = {
@@ -426,22 +429,23 @@ class course_helper(QtGui.QMainWindow, Ui_Dialog):
                 js = json.loads(res.read())
                 code = js.get('err').get('code')
                 caurse = js.get('err').get('caurse')
-                s = u""
+                nowtime = time.strftime("%Y/%m/%d %H:%M:%S", time.localtime(time.time()))
+                s = u"" + nowtime
                 if caurse == None:
                     caurse = ""
                 if code == 18:
-                    s = u"抢不到,再试试吧。。。"
+                    s += u"抢不到,再试试吧。。。"
                 elif code == 0:
                     QtGui.QMessageBox.information(self, u'提示', u'成功选上了！！！！结束选课。', QtGui.QMessageBox.Yes)
-                    s = u"成功选上了这门课！！！！结束选课。"
+                    s += u"成功选上了这门课！！！！结束选课。"
                 elif code == 9:
-                    s = u"这门课已经选上了！不要重复选了吧。。。"
+                    s += u"这门课已经选上了！不要重复选了吧。。。"
                 elif code == 5:
-                    s = u"选课失败：系统中没有您这个学期的报到记录，不允许选课。请联系您所在院系的教务员申请补注册。"
+                    s += u"选课失败：系统中没有您这个学期的报到记录，不允许选课。请联系您所在院系的教务员申请补注册。"
                 elif code == 1:
-                    s = u"还没开始选课呢！！"
+                    s += u"还没开始选课呢！！"
                 else:
-                    s = u"未知代码" + str(code)
+                    s += u"未知代码" + str(code)
 
                 self.label_6.setText(u"正在进行第" + str(self.pick_times) + u"轮选课\n")
                 self.debugcontent += s + "\n"
@@ -457,7 +461,7 @@ class course_helper(QtGui.QMainWindow, Ui_Dialog):
                 QtGui.QMessageBox.information(self, u'提示', u"出错/掉线, 请重新登录或确认输入的教学班号是否正确,错误原因:" + str(e), QtGui.QMessageBox.Yes)
                 break
                 # print "出错, 请重新登录或确认输入的教学班号是否正确", e
-        self.Timer.start(800)
+        self.Timer.start(100)
 
     def start(self):
         self.username = self.textEdit_id.toPlainText()
