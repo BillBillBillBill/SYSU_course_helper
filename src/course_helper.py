@@ -8,10 +8,9 @@
 
 __author__ = 'Huang Xiongbiao (billo@qq.com)'
 __email__ = 'billo@qq.com'
-__version__ = '0.0.5'
+__version__ = '0.0.6(一秒十次郎)'
 
 import time
-from pytes.pytesser import image_to_string, image_file_to_string
 import urllib2
 import urllib
 import json
@@ -21,11 +20,33 @@ import os
 import StringIO
 import Image
 import time
+import logging
+import logging.handlers
 reload(sys)
 sys.setdefaultencoding("utf-8")
 
 from PyQt4 import QtCore, QtGui, uic
 
+
+LOG_FILE = 'course_helper.log'
+
+handler = logging.handlers.RotatingFileHandler(LOG_FILE, maxBytes = 1024*1024, backupCount = 5) # 实例化handler
+fmt = '%(asctime)s - %(filename)s:%(lineno)s - %(name)s - %(message)s'
+
+formatter = logging.Formatter(fmt)   # 实例化formatter
+handler.setFormatter(formatter)      # 为handler添加formatter
+
+logger = logging.getLogger('course_helper')    # 获取名为tst的logger
+logger.addHandler(handler)           # 为logger添加handler
+logger.setLevel(logging.DEBUG)
+
+load_pytes = True
+
+try:
+    from pytes.pytesser import image_to_string, image_file_to_string
+except Exception, e:
+    logger.info(str(e))
+    load_pytes = False
 
 try:
     _fromUtf8 = QtCore.QString.fromUtf8
@@ -209,6 +230,8 @@ class course_helper(QtGui.QMainWindow, Ui_Dialog):
         self.password = ""
         self.code = ""
         self.sid = False
+        self.autoRestart = True
+        self.restartTime = 0
         self.debugcontent = u"SYSU course helper By Bill\n注意要填的是教学班号,不是课程号！！！\n在教务系统中点击课程名称后可以看到教学班号\n"
         self.debtex.setText(self.debugcontent)
 
@@ -243,8 +266,8 @@ class course_helper(QtGui.QMainWindow, Ui_Dialog):
         m = hashlib.md5()
         m.update(str(psw))
         md5Result = m.hexdigest().upper()
-        print psw,len(psw),type(psw)
-        print "MD5:" + md5Result
+        # print psw,len(psw),type(psw)
+        # print "MD5:" + md5Result
         return  md5Result
 
     # 根据传入的currentIndex来隐藏/显示 标签/输入框
@@ -296,6 +319,7 @@ class course_helper(QtGui.QMainWindow, Ui_Dialog):
             res = urllib2.urlopen(req)
 
         except Exception, e:
+            logger.info("load_cookie"+str(e))
             self.debtex.setText(self.debugcontent + str(e))
 
     def get_code_img(self):
@@ -328,7 +352,9 @@ class course_helper(QtGui.QMainWindow, Ui_Dialog):
                 os.remove(CODE_IMG_PATH)
 
         except Exception, e:
-            self.debtex.setText(self.debugcontent + u"[Error]下载验证码失败! 原因:" + str(e))
+            logger.info("get_code_img"+str(e))
+            if not self.autoRestart:
+                self.debtex.setText(self.debugcontent + u"[Error]下载验证码失败! 原因:" + str(e))
 
     # 处理验证码, 识别
     def processCode(self):
@@ -351,8 +377,10 @@ class course_helper(QtGui.QMainWindow, Ui_Dialog):
         # 这里的参数可以这么认为：从某图的(x,y)坐标开始截，截到(width+x,height+y)坐标
         box = (1, 1, ori_w-1, ori_h-1)
         newIm = self.img.crop(box)
-        code = image_to_string(newIm)
-        self.textEdit_code.setText(code[:4])
+        if load_pytes:
+            code = image_to_string(newIm)
+            # 自动填写验证码
+            self.textEdit_code.setText(code[:4])
 
     def login(self):
         try:
@@ -376,11 +404,15 @@ class course_helper(QtGui.QMainWindow, Ui_Dialog):
             res = urllib2.urlopen(req)
 
             sid = res.geturl().replace('http://uems.sysu.edu.cn/elect/s/types?sid=', '')
-            QtGui.QMessageBox.information(self, u'提示', u'登录成功!', QtGui.QMessageBox.Yes)
+            if not self.restartTime:
+                QtGui.QMessageBox.information(self, u'提示', u'登录成功!', QtGui.QMessageBox.Yes)
             return sid
             #print res.read()
         except Exception, e:
-            QtGui.QMessageBox.information(self, u'提示', u'登录失败 账号/密码/验证码错误??  错误原因:'+str(e), QtGui.QMessageBox.Yes)
+            logger.info("login"+str(e))
+            if not self.restartTime:
+                QtGui.QMessageBox.information(self, u'提示', u'登录失败 账号/密码/验证码错误??  错误原因:'+str(e), QtGui.QMessageBox.Yes)
+            return None
 
     def take_course_once(self):
         # 如果已经选到课或者出错 则停止
@@ -391,7 +423,7 @@ class course_helper(QtGui.QMainWindow, Ui_Dialog):
             QtGui.QMessageBox.information(self, u'提示', u'请输入最少一门课程', QtGui.QMessageBox.Yes)
             return
         # 清屏
-        if len(self.debugcontent) > 300:
+        if len(self.debugcontent) > 250:
             self.debugcontent = ""
 
         self.pick_times += 1
@@ -455,46 +487,60 @@ class course_helper(QtGui.QMainWindow, Ui_Dialog):
                 if code == 0:
                     self.pick_fail = True
                     break
-                print "(code:", code, ")", caurse, s
+                logger.info("(code:%s) %s %s" % (code, caurse, s))
             except Exception, e:
+                logger.info("take_course_once" + str(e))
                 self.pick_fail = True
-                QtGui.QMessageBox.information(self, u'提示', u"出错/掉线, 请重新登录或确认输入的教学班号是否正确,错误原因:" + str(e), QtGui.QMessageBox.Yes)
+                self.Timer.stop()
+                # 自动重试
+                if self.autoRestart:
+                    self.restart()
+                    return
+                else:
+                    QtGui.QMessageBox.information(self, u'提示', u"出错/掉线, 请重新登录或确认输入的教学班号是否正确,错误原因:" + str(e), QtGui.QMessageBox.Yes)
                 break
                 # print "出错, 请重新登录或确认输入的教学班号是否正确", e
         self.Timer.start(100)
 
     def start(self):
-        self.username = self.textEdit_id.toPlainText()
-        self.password = self.textEdit_password.toPlainText()
-        self.code = self.textEdit_code.toPlainText()
-        self.pick_fail = False
-        self.Timer.stop()
+        try:
+            self.username = self.textEdit_id.toPlainText()
+            self.password = self.textEdit_password.toPlainText()
+            self.code = self.textEdit_code.toPlainText()
+            self.pick_fail = False
+            self.Timer.stop()
 
-        if len(self.code) < 4 or len(self.username) != 8 or self.password == "":
-            QtGui.QMessageBox.information(self, u'提示', u'请输入正确的学号/密码/验证码', QtGui.QMessageBox.Yes)
-            return
+            if len(self.code) < 4 or len(self.username) != 8 or self.password == "":
+                if self.autoRestart:
+                    self.restart()
+                else:
+                    QtGui.QMessageBox.information(self, u'提示', u'请输入正确的学号/密码/验证码', QtGui.QMessageBox.Yes)
+                return
 
-        # 计算出Content-Length
-        self.header['Content-Length'] = str(72+len(self.md5(self.password)))
+            # 计算出Content-Length
+            self.header['Content-Length'] = str(72+len(self.md5(self.password)))
 
-        self.debtex.setText(self.debugcontent + u"登录中...\n")
+            self.debtex.setText(self.debugcontent + u"登录中...\n")
 
-        # 登陆
-        self.sid = self.login()
-        if self.sid:
-            self.debugcontent += u"登录成功..Sid:" + self.sid + "\n"
-            self.debtex.setText(self.debugcontent)
-            # 获取教学班号列表
-            self.read_course()
-            # print self.course_list
-            self.take_course_once()
-        else:
-            # 登陆失败 刷新验证码
-            self.get_code_img()
-            self.debugcontent += u"登录失败- -再试试吧\n"
-            self.debtex.setText(self.debugcontent)
-
-
+            # 登陆
+            self.sid = self.login()
+            if self.sid:
+                self.debugcontent += u"登录成功..Sid:" + self.sid + "\n"
+                self.debtex.setText(self.debugcontent)
+                # 获取教学班号列表
+                self.read_course()
+                # print self.course_list
+                self.take_course_once()
+            else:
+                if self.autoRestart:
+                    self.restart()
+                else:
+                    # 登陆失败 刷新验证码
+                    self.get_code_img()
+                    self.debugcontent += u"登录失败- -再试试吧\n"
+                    self.debtex.setText(self.debugcontent)
+        except Exception,e:
+            logger.info("start" + str(e))
 
     def read_course(self):
         # 添加课程
@@ -503,6 +549,12 @@ class course_helper(QtGui.QMainWindow, Ui_Dialog):
         for course in l:
             if course.toPlainText() != "":
                 self.course_list.append(course.toPlainText())
+
+    def restart(self):
+        self.restartTime += 1
+        self.Timer.stop()
+        self.get_code_img()
+        self.start()
 
 
 app = QtGui.QApplication(sys.argv)

@@ -15,5 +15,5 @@ import  os
 
 if __name__ == '__main__':
     from PyInstaller.main import run
-    opts=['course_helper.py','-D','-w','--icon=D:\Python\pyqtfile\course_helper\logo.ico']
+    opts=['course_helper.py','-F','-w','--icon=D:\Python\pyqtfile\course_helper\logo.ico']
     run(opts)
